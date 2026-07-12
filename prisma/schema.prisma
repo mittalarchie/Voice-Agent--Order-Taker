@@ -1,0 +1,148 @@
+// Smash & Go — Voice Order-Taker
+// Data model per the implementation plan (§3).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Menu catalog ────────────────────────────────────────────────────────
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String     @unique // "Burgers" | "Sides" | "Drinks" | "Combos"
+  menuItems MenuItem[]
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  basePrice   Int // AED, stored as minor-unit-free integer (menu has no fils)
+  isCombo     Boolean  @default(false)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  modifierGroups   ItemModifierGroup[]
+  orderLineItems   OrderLineItem[]
+
+  // Only populated when isCombo = true — the burger/side/drink slots
+  // that make up this combo.
+  comboSlots ComboComponent[] @relation("ComboParent")
+  // Only populated when this item is eligible to fill a combo slot.
+  fillsSlots ComboComponent[] @relation("ComboEligibleItem")
+}
+
+// ─── Modifiers ───────────────────────────────────────────────────────────
+// A group is a question ("Size?", "Add-ons?", "Spice Level?"); options are
+// the answers. selectionType controls whether the voice agent should treat
+// it as pick-one (Size) or pick-any (Add-ons).
+
+enum SelectionType {
+  SINGLE
+  MULTIPLE
+}
+
+model ModifierGroup {
+  id            String        @id @default(cuid())
+  name          String // "Size" | "Burger Add-ons" | "No Onions/Pickles" | "Drink Flavor" ...
+  selectionType SelectionType
+  isRequired    Boolean       @default(false)
+
+  options    ModifierOption[]
+  menuItems  ItemModifierGroup[]
+}
+
+model ModifierOption {
+  id              String        @id @default(cuid())
+  name            String // "Large" | "Extra Cheese" | "No onions" ...
+  priceDelta      Int           @default(0) // AED, can be 0 (e.g. "No onions")
+
+  modifierGroupId String
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id])
+
+  lineItemModifiers OrderLineItemModifier[]
+}
+
+// Many-to-many join: which modifier groups are offered on which menu items
+// (e.g. Fries → Size; Burgers → Add-ons + No-onion/pickle).
+model ItemModifierGroup {
+  menuItemId      String
+  menuItem        MenuItem      @relation(fields: [menuItemId], references: [id])
+  modifierGroupId String
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id])
+
+  @@id([menuItemId, modifierGroupId])
+}
+
+// ─── Combos ──────────────────────────────────────────────────────────────
+// A combo (e.g. "Classic Combo") is a MenuItem with isCombo = true. Its
+// slots (burger / side / drink) are defined here, each pointing at the
+// category it draws from and, optionally, a default item.
+
+model ComboComponent {
+  id String @id @default(cuid())
+
+  comboId String
+  combo   MenuItem @relation("ComboParent", fields: [comboId], references: [id])
+
+  slotName String // "burger" | "side" | "drink"
+
+  defaultItemId String?
+  defaultItem   MenuItem? @relation("ComboEligibleItem", fields: [defaultItemId], references: [id])
+}
+
+// ─── Orders ──────────────────────────────────────────────────────────────
+// The total is NEVER stored here — it's always derived at read time from
+// OrderLineItem + OrderLineItemModifier. See §3 of the plan for why.
+
+enum OrderStatus {
+  IN_PROGRESS
+  CONFIRMED
+  CANCELLED
+}
+
+model Order {
+  id        String      @id @default(cuid())
+  status    OrderStatus @default(IN_PROGRESS)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  lineItems OrderLineItem[]
+}
+
+model OrderLineItem {
+  id       String @id @default(cuid())
+  quantity Int    @default(1)
+  note     String? // free-text aside the model captured but couldn't structure (rare escape hatch)
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+
+  // Snapshot of MenuItem.basePrice at the moment this line was added, so a
+  // later menu price change can't silently rewrite an in-progress order.
+  unitBasePriceSnapshot Int
+
+  modifiers OrderLineItemModifier[]
+}
+
+model OrderLineItemModifier {
+  id String @id @default(cuid())
+
+  orderLineItemId String
+  orderLineItem   OrderLineItem @relation(fields: [orderLineItemId], references: [id])
+
+  modifierOptionId String
+  modifierOption   ModifierOption @relation(fields: [modifierOptionId], references: [id])
+
+  // Snapshot of ModifierOption.priceDelta at the moment it was applied.
+  priceDeltaSnapshot Int
+}
