@@ -14,7 +14,7 @@ const THINKING_MESSAGES = [
   { afterMs: 0, text: "Thinking…" },
   { afterMs: 4000, text: "Still working on that — looking things up…" },
   { afterMs: 10000, text: "Almost there, multi-item orders take a bit longer…" },
-];
+] as const;
 
 function useThinkingMessage(status: string) {
   const [text, setText] = useState(THINKING_MESSAGES[0].text);

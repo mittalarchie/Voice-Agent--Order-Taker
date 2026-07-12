@@ -57,7 +57,12 @@ async function main() {
         tools,
       });
 
-      const choice = completion.choices[0].message;
+      const firstChoice = completion.choices[0];
+      if (!firstChoice) {
+        console.error("LLM returned no completion choices.");
+        break;
+      }
+      const choice = firstChoice.message;
       messages.push(choice);
 
       if (!choice.tool_calls || choice.tool_calls.length === 0) {

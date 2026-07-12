@@ -53,7 +53,11 @@ export async function POST(request: Request) {
         `[converse] round ${round}: ${elapsedMs}ms | requests left: ${remaining ?? "?"} (resets ${resetTime ?? "?"}) | tokens left: ${tokensRemaining ?? "?"} (resets ${tokensReset ?? "?"})`,
       );
 
-      const choice = completion.choices[0].message;
+      const firstChoice = completion.choices[0];
+      if (!firstChoice) {
+        throw new Error("LLM returned no completion choices.");
+      }
+      const choice = firstChoice.message;
       messages.push(choice);
 
       if (!choice.tool_calls || choice.tool_calls.length === 0) {

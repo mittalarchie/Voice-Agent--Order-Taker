@@ -126,7 +126,7 @@ export function useSpeechOrderSession() {
 
     recognition.onresult = (event) => {
       const result = event.results[event.results.length - 1];
-      const text = result[0]?.transcript ?? "";
+      const text = result?.[0]?.transcript ?? "";
       void processTurn(text);
     };
 
