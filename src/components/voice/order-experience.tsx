@@ -17,7 +17,7 @@ const THINKING_MESSAGES = [
 ] as const;
 
 function useThinkingMessage(status: string) {
-  const [text, setText] = useState(THINKING_MESSAGES[0].text);
+  const [text, setText] = useState<string>(THINKING_MESSAGES[0].text);
 
   useEffect(() => {
     if (status !== "thinking") {
